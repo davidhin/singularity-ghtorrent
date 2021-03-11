@@ -17,9 +17,6 @@ Path(sg.storage_interim_root() / "ghtorrent").mkdir(exist_ok=True)
 Path(sg.storage_processed_root() / "pr_comments/").mkdir(exist_ok=True)
 Path(sg.storage_processed_root() / "commit_messages/").mkdir(exist_ok=True)
 
-# Generate job array mapping
-Path(sg.storage_interim_root() / "hpc_mapping/").mkdir(exist_ok=True)
-
 # Get dates
 all_dates = []
 for year in range(START_YEAR, END_YEAR + 1):
