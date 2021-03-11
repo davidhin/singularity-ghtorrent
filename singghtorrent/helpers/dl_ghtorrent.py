@@ -103,8 +103,9 @@ def download_github_data(date: str):
         else:
             break
 
-    # if should_skip(date, "interim"):
-    #     return
+    # Skip if already complete
+    if should_skip(date, "interim"):
+        return
     ext_dl_path = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
 
     # Try and get github data
