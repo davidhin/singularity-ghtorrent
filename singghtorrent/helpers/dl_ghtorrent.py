@@ -55,7 +55,20 @@ def get_github_data(path: str) -> pd.DataFrame:
     COLUMNS = ["COMMENT_ID", "COMMIT_ID", "URL", "AUTHOR", "CREATED_AT", "BODY"]
     comments_list = []
     commits_list = []
-    for line in tqdm(gzip.open(path).readlines()):
+
+    try:
+        read_github_lines = gzip.open(path).readlines()
+    except Exception as e:
+        print(e)
+        date4 = str(path).split("/")[-1].split(".")[0]
+        delete_glob(str(sg.storage_external_root() / "ghtorrent/{}*".format(date4)))
+        delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}*".format(date4)))
+        date_split = [int(i) for i in date4.split("-")]
+        print("Restarting {}".format(date4))
+        download_github_day((date_split[0], date_split[1], date_split[2]))
+        return
+
+    for line in tqdm(read_github_lines):
         event = json.loads(line)
         if event["type"] == "PullRequestReviewCommentEvent":
             comments_list.append(
@@ -85,7 +98,11 @@ def download_github_data(date: str):
     if should_skip(date, "interim"):
         return
     ext_dl_path = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
-    df_prc, df_cm = get_github_data(ext_dl_path)
+    try:
+        df_prc, df_cm = get_github_data(ext_dl_path)
+    except Exception as e:
+        print(e)
+        return
     df_prc_path = sg.storage_interim_root() / "ghtorrent/{}-prc.parquet".format(date)
     df_prc.to_parquet(df_prc_path, index=0, compression="gzip")
     df_cm_path = sg.storage_interim_root() / "ghtorrent/{}-cm.parquet".format(date)
@@ -123,12 +140,14 @@ def download_github_day(date: tuple):
             cm_paths = glob(
                 str(sg.storage_interim_root() / "ghtorrent/{}-*-cm*".format(date3))
             )
-            if len(prc_paths) == 24:
-                df = pd.concat([pd.read_parquet(i) for i in prc_paths])
-                df.to_parquet(proc_prc_path, index=0, compression="gzip")
-            if len(cm_paths) == 24:
-                df = pd.concat([pd.read_parquet(i) for i in cm_paths])
-                df.to_parquet(cm_prc_path, index=0, compression="gzip")
+            if len(prc_paths) != 24 or len(cm_paths) != 24:
+                print("Wrong number of files with {}. Restarting...".format(d))
+                download_github_day(date)
+                return
+            df = pd.concat([pd.read_parquet(i) for i in prc_paths])
+            df.to_parquet(proc_prc_path, index=0, compression="gzip")
+            df = pd.concat([pd.read_parquet(i) for i in cm_paths])
+            df.to_parquet(cm_prc_path, index=0, compression="gzip")
     if os.path.exists(proc_prc_path) and os.path.exists(cm_prc_path):
         delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}-*".format(date3)))
         delete_glob(str(sg.storage_external_root() / "ghtorrent/{}-*".format(date3)))
