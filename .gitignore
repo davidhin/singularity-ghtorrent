@@ -6,3 +6,4 @@ storage
 *.egg-info
 output
 .vscode/sftp.json
+hpc/logs/*
