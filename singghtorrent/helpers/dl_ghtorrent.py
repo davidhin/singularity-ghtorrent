@@ -41,9 +41,13 @@ def download_gh_event(date: str):
     saveurl = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
     if should_skip(date):
         return
-    r = requests.get(url)
-    with open(saveurl, "wb") as f:
-        f.write(r.content)
+    try:
+        r = requests.get(url)
+        with open(saveurl, "wb") as f:
+            f.write(r.content)
+    except Exception as e:
+        print(e)
+        download_gh_event(date)
 
 
 def get_github_data(path: str) -> pd.DataFrame:
