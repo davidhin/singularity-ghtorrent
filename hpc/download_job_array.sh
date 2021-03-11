@@ -3,7 +3,7 @@
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --time=03:00:00
-#SBATCH --mem=1GB
+#SBATCH --mem=5GB
 #SBATCH --array=1-200
 #SBATCH --err="hpc/logs/main_%a.err"
 #SBATCH --output="hpc/logs/main_%a.out"
