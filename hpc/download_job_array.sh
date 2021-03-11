@@ -20,4 +20,4 @@ module load git/2.21.0-foss-2016b
 echo "array_job_index: $SLURM_ARRAY_TASK_ID"
 
 # Start singularity instance
-singularity run --nv main.simg -p singghtorrent/analysis/main.py -a $SLURM_ARRAY_TASK_ID
+singularity run main.simg -p singghtorrent/analysis/main.py -a $SLURM_ARRAY_TASK_ID
