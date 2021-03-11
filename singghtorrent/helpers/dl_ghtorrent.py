@@ -69,7 +69,9 @@ def get_github_data(path: str) -> pd.DataFrame:
     pr_comments_df = pd.DataFrame(comments_list, columns=COLUMNS)
     commit_message_df = pd.DataFrame.from_records(commits_list).drop_duplicates(
         subset="sha"
-    )[["message", "url"]]
+    )
+    if len(commit_message_df) > 0:
+        commit_message_df = commit_message_df[["message", "url"]]
     return pr_comments_df, commit_message_df
 
 
