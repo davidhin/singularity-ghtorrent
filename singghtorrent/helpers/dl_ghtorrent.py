@@ -4,7 +4,6 @@ import os
 from calendar import Calendar
 from datetime import date
 from glob import glob
-from multiprocessing.pool import Pool
 
 import pandas as pd
 import requests
@@ -46,8 +45,16 @@ def download_gh_event(date: str):
         f.write(r.content)
 
 
-def get_github_data(path: str) -> pd.DataFrame:
-    """Get PR comments and commit messages from events."""
+def get_github_data(path: str) -> tuple(pd.DataFrame, pd.DataFrame):
+    """Get PR comments and commit messages from events.
+
+    Args:
+        path (str): Path as string, e.g. "/path/to/file"
+
+    Returns:
+        tuple(pd.DataFrame, pd.DataFrame): Dataframes representing
+        commits and pull request comments.
+    """
     COLUMNS = ["COMMENT_ID", "COMMIT_ID", "URL", "AUTHOR", "CREATED_AT", "BODY"]
     comments_list = []
     commits_list = []
@@ -134,13 +141,28 @@ def download_github_data(date: str):
 
 
 def delete_glob(globstr: str):
-    """Delete files using glob."""
+    """Delete files using glob.
+
+    Args:
+        globstr (str): "folder/file*"
+    """
     for f in glob(globstr):
         os.remove(f)
 
 
-def download_github_day(date: tuple):
-    """Download by a full date (year, month, day)."""
+def download_github_day(date: tuple[int, int, int]):
+    """Download by a full date (year, month, day).
+
+    Example:
+        >>> download_github_day((2021, 1, 1))
+        42%|████▏     | 73968/177742 [00:03<00:04, 20791.74it/s]
+
+    Args:
+        date (tuple[int, int, int]): Tuple representing year, month, day
+
+    Returns:
+        None: Outputs saved to storage/
+    """
     # Format dates
     dates = generate_date_strs(date[0], date[1], date[2])
     date3 = "{}-{:02d}-{:02d}".format(date[0], date[1], date[2])
@@ -180,13 +202,43 @@ def download_github_day(date: tuple):
     return
 
 
-def generate_date_strs(year: int, month: int, day: int) -> str:
-    """Automatically generate date strings."""
+def generate_date_strs(year: int, month: int, day: int) -> list:
+    """Automatically generate date strings.
+
+    Example:
+        >>> generate_date_strs(2021, 1, 2)
+        ['2021-01-02-0',
+        '2021-01-02-1',
+        '2021-01-02-2',
+        '2021-01-02-3',...]
+
+    Args:
+        year (int): Year e.g. 2021
+        month (int): Month e.g. 2
+        day (int): Day e.g. 1
+
+    Returns:
+        list: list of dates as strings
+    """
     return ["{}-{:02d}-{:02d}-{}".format(year, month, day, i) for i in range(24)]
 
 
 def get_dates_for_year(year: int) -> list:
-    """Return list of dates for given year."""
+    """Get a list of dates given a year.
+
+    Example:
+        >>> get_dates_for_year(2021)
+        [(2021, 1, 1),
+        (2021, 1, 2),
+        (2021, 1, 3),
+        (2021, 1, 4), ...]
+
+    Args:
+        year (int): Year as integer, e.g. 2015
+
+    Returns:
+        list: List of years
+    """
     early_stop = False
     dates = []
     today = date.today()
@@ -204,17 +256,3 @@ def get_dates_for_year(year: int) -> list:
         if early_stop:
             return dates
     return dates
-
-
-def download_pool_hours(year: str, month: str, day: str) -> pd.DataFrame:
-    """Download data in parallel and return dataframe."""
-    pool = Pool(4)
-    dates = generate_date_strs(year, month, day)
-    pr_comments_df = []
-    commit_messages_df = []
-    for result in pool.imap_unordered(download_github_data, dates):
-        pr_comments_df.append(result[0])
-        commit_messages_df.append(result[1])
-    pool.close()
-    pool.join()
-    return pd.concat(pr_comments_df), pd.concat(commit_messages_df)
