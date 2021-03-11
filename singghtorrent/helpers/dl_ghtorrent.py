@@ -18,12 +18,12 @@ def should_skip(date: str, stage: str = ""):
     df_prc_path = sg.storage_interim_root() / "ghtorrent/{}-prc.parquet".format(date)
     df_cm_path = sg.storage_interim_root() / "ghtorrent/{}-cm.parquet".format(date)
     if os.path.exists(df_prc_path) and os.path.exists(df_cm_path):
-        print("Already interimmed.")
+        print("Already interimmed {}.".format(date))
         return True
     elif stage == "interim":
         return False
     if os.path.exists(ext_path):
-        print("Already downloaded.")
+        print("Already downloaded {}.".format(date))
         return True
     return False
 
@@ -41,13 +41,9 @@ def download_gh_event(date: str):
     saveurl = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
     if should_skip(date):
         return
-    try:
-        r = requests.get(url)
-        with open(saveurl, "wb") as f:
-            f.write(r.content)
-    except Exception as e:
-        print(e)
-        download_gh_event(date)
+    r = requests.get(url)
+    with open(saveurl, "wb") as f:
+        f.write(r.content)
 
 
 def get_github_data(path: str) -> pd.DataFrame:
@@ -55,19 +51,7 @@ def get_github_data(path: str) -> pd.DataFrame:
     COLUMNS = ["COMMENT_ID", "COMMIT_ID", "URL", "AUTHOR", "CREATED_AT", "BODY"]
     comments_list = []
     commits_list = []
-
-    try:
-        read_github_lines = gzip.open(path).readlines()
-    except Exception as e:
-        print(e)
-        date4 = str(path).split("/")[-1].split(".")[0]
-        delete_glob(str(sg.storage_external_root() / "ghtorrent/{}*".format(date4)))
-        delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}*".format(date4)))
-        date_split = [int(i) for i in date4.split("-")]
-        print("Restarting {}".format(date4))
-        download_github_day((date_split[0], date_split[1], date_split[2]))
-        return
-
+    read_github_lines = gzip.open(path).readlines()
     for line in tqdm(read_github_lines):
         event = json.loads(line)
         if event["type"] == "PullRequestReviewCommentEvent":
@@ -93,20 +77,59 @@ def get_github_data(path: str) -> pd.DataFrame:
 
 
 def download_github_data(date: str):
-    """Download and parse PR given YYYY-MM-DD-hh."""
-    download_gh_event(date)
-    if should_skip(date, "interim"):
-        return
+    """Download and parse github data.
+
+    Example:
+        download_github_data("2021-1-1-0")
+        download_github_data("2021-1-1-13")
+
+    Args:
+        date (str): Date in format "YYYY-MM-DD-h"
+    """
+    # Try and download
+    while True:
+        try:
+            download_gh_event(date)
+        except Exception as e:
+            print(e)
+            pass
+        else:
+            break
+
+    # if should_skip(date, "interim"):
+    #     return
     ext_dl_path = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
-    try:
-        df_prc, df_cm = get_github_data(ext_dl_path)
-    except Exception as e:
-        print(e)
-        return
+
+    # Try and get github data
+    while True:
+        try:
+            df_prc, df_cm = get_github_data(ext_dl_path)
+        except Exception as e:
+            print(e)
+            date4 = str(ext_dl_path).split("/")[-1].split(".")[0]
+            delete_glob(str(sg.storage_external_root() / "ghtorrent/{}*".format(date4)))
+            delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}*".format(date4)))
+            pass
+        else:
+            break
+
+    # Save paths
     df_prc_path = sg.storage_interim_root() / "ghtorrent/{}-prc.parquet".format(date)
-    df_prc.to_parquet(df_prc_path, index=0, compression="gzip")
     df_cm_path = sg.storage_interim_root() / "ghtorrent/{}-cm.parquet".format(date)
-    df_cm.to_parquet(df_cm_path, index=0, compression="gzip")
+
+    # Try and save to parquet
+    while True:
+        try:
+            df_prc.to_parquet(df_prc_path, index=0, compression="gzip")
+            df_cm.to_parquet(df_cm_path, index=0, compression="gzip")
+            pd.read_parquet(df_prc_path)
+            pd.read_parquet(df_cm_path)
+        except Exception as e:
+            print(e)
+            pass
+        else:
+            break
+
     return
 
 
@@ -118,28 +141,28 @@ def delete_glob(globstr: str):
 
 def download_github_day(date: tuple):
     """Download by a full date (year, month, day)."""
+    # Format dates
     dates = generate_date_strs(date[0], date[1], date[2])
     date3 = "{}-{:02d}-{:02d}".format(date[0], date[1], date[2])
-    proc_prc_path = (
-        sg.storage_processed_root() / "pr_comments" / "{}-prc.parquet".format(date3)
-    )
-    cm_prc_path = (
-        sg.storage_processed_root() / "commit_messages" / "{}-cm.parquet".format(date3)
-    )
+
+    # Generate paths
+    spr = sg.storage_processed_root()
+    sir = sg.storage_interim_root()
+    proc_prc_path = spr / "pr_comments" / "{}-prc.parquet".format(date3)
+    cm_prc_path = spr / "commit_messages" / "{}-cm.parquet".format(date3)
+
+    # Skip if complete
     if os.path.exists(proc_prc_path) and os.path.exists(cm_prc_path):
         delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}-*".format(date3)))
         delete_glob(str(sg.storage_external_root() / "ghtorrent/{}-*".format(date3)))
         return "Already processed {}".format(date3)
 
+    # Download data for all hours in date
     for d in dates:
         download_github_data(d)
         if d.split("-")[3] == "23":
-            prc_paths = glob(
-                str(sg.storage_interim_root() / "ghtorrent/{}-*-prc*".format(date3))
-            )
-            cm_paths = glob(
-                str(sg.storage_interim_root() / "ghtorrent/{}-*-cm*".format(date3))
-            )
+            prc_paths = glob(str(sir / "ghtorrent/{}-*-prc*".format(date3)))
+            cm_paths = glob(str(sir / "ghtorrent/{}-*-cm*".format(date3)))
             if len(prc_paths) != 24 or len(cm_paths) != 24:
                 print("Wrong number of files with {}. Restarting...".format(d))
                 download_github_day(date)
@@ -148,6 +171,8 @@ def download_github_day(date: tuple):
             df.to_parquet(proc_prc_path, index=0, compression="gzip")
             df = pd.concat([pd.read_parquet(i) for i in cm_paths])
             df.to_parquet(cm_prc_path, index=0, compression="gzip")
+
+    # Delete unneeded external files
     if os.path.exists(proc_prc_path) and os.path.exists(cm_prc_path):
         delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}-*".format(date3)))
         delete_glob(str(sg.storage_external_root() / "ghtorrent/{}-*".format(date3)))
