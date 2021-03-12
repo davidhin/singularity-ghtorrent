@@ -45,7 +45,7 @@ def download_gh_event(date: str):
         f.write(r.content)
 
 
-def get_github_data(path: str) -> tuple(pd.DataFrame, pd.DataFrame):
+def get_github_data(path: str) -> pd.DataFrame:
     """Get PR comments and commit messages from events.
 
     Args:
@@ -151,7 +151,7 @@ def delete_glob(globstr: str):
         os.remove(f)
 
 
-def download_github_day(date: tuple[int, int, int]):
+def download_github_day(date: tuple):
     """Download by a full date (year, month, day).
 
     Example:
