@@ -36,7 +36,7 @@ def download_gh_event(date: str):
     Args:
         date (str): Date like 2021-01-01-0
     """
-    url = "http://data.gharchive.org/{}.json.gz".format(date)
+    url = "https://data.gharchive.org/{}.json.gz".format(date)
     saveurl = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
     if should_skip(date):
         return
