@@ -41,6 +41,9 @@ def download_gh_event(date: str):
     if should_skip(date):
         return
     r = requests.get(url)
+    if r.status_code == 404:
+        f = open(str(saveurl) + ".404", "w")
+        return
     with open(saveurl, "wb") as f:
         f.write(r.content)
 
@@ -93,30 +96,31 @@ def download_github_data(date: str):
     Args:
         date (str): Date in format "YYYY-MM-DD-h"
     """
-    # Try and download
-    while True:
-        try:
-            download_gh_event(date)
-        except Exception as e:
-            print(e)
-            pass
-        else:
-            break
-
     # Skip if already complete
     if should_skip(date, "interim"):
         return
-    ext_dl_path = sg.storage_external_root() / "ghtorrent/{}.json.gz".format(date)
+    ser = sg.storage_external_root()
 
     # Try and get github data
     while True:
         try:
+            # Try and download
+            while True:
+                try:
+                    download_gh_event(date)
+                except Exception as e:
+                    print("Download Error:", e)
+                    pass
+                else:
+                    break
+            ext_dl_path = glob(str(ser / "ghtorrent/{}*".format(date)))[0]
+            if "404" in ext_dl_path:
+                return
             df_prc, df_cm = get_github_data(ext_dl_path)
         except Exception as e:
-            print(e)
-            date4 = str(ext_dl_path).split("/")[-1].split(".")[0]
-            delete_glob(str(sg.storage_external_root() / "ghtorrent/{}*".format(date4)))
-            delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}*".format(date4)))
+            print("Get Github Data Error:", e)
+            delete_glob(str(sg.storage_external_root() / "ghtorrent/{}*".format(date)))
+            delete_glob(str(sg.storage_interim_root() / "ghtorrent/{}*".format(date)))
             pass
         else:
             break
@@ -169,6 +173,7 @@ def download_github_day(date: tuple):
     date3 = "{}-{:02d}-{:02d}".format(date[0], date[1], date[2])
 
     # Generate paths
+    ser = sg.storage_external_root()
     spr = sg.storage_processed_root()
     sir = sg.storage_interim_root()
     proc_prc_path = spr / "pr_comments" / "{}-prc.parquet".format(date3)
@@ -181,19 +186,28 @@ def download_github_day(date: tuple):
         return "Already processed {}".format(date3)
 
     # Download data for all hours in date
-    for d in dates:
-        download_github_data(d)
-        if d.split("-")[3] == "23":
-            prc_paths = glob(str(sir / "ghtorrent/{}-*-prc*".format(date3)))
-            cm_paths = glob(str(sir / "ghtorrent/{}-*-cm*".format(date3)))
-            if len(prc_paths) != 24 or len(cm_paths) != 24:
-                print("Wrong number of files with {}. Restarting...".format(d))
-                download_github_day(date)
-                return
+    while True:
+        try:
+            for d in dates:
+                download_github_data(d)
+                if d.split("-")[3] == "23":
+                    prc_paths = glob(str(sir / "ghtorrent/{}-*-prc*".format(date3)))
+                    cm_paths = glob(str(sir / "ghtorrent/{}-*-cm*".format(date3)))
+                    ext_files = glob(str(ser / "ghtorrent/{}*".format(date3)))
+                    n404s = len([i for i in ext_files if "404" in i])
+                    if n404s > 0:
+                        print("404s for {}: {}".format(date3, n404s))
+                    if len(prc_paths) != 24 - n404s or len(cm_paths) != 24 - n404s:
+                        raise Exception("Wrong number of files with {}".format(d))
+        except Exception as e:
+            print(e)
+            pass
+        else:
             df = pd.concat([pd.read_parquet(i) for i in prc_paths])
             df.to_parquet(proc_prc_path, index=0, compression="gzip")
             df = pd.concat([pd.read_parquet(i) for i in cm_paths])
             df.to_parquet(cm_prc_path, index=0, compression="gzip")
+            break
 
     # Delete unneeded external files
     if os.path.exists(proc_prc_path) and os.path.exists(cm_prc_path):
